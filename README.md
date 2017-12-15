@@ -1,11 +1,13 @@
 # UNETEntities
 
-A rudimentary implementation of the Source Multiplayer Networking model for entites.
+A rudimentary implementation of the [Source Multiplayer Networking][srcnet] model for entites.
 
 Each player's transform and input information are sent to each client, which
 maintains a circular buffer of state updates. These state updates are evaluated
 to find two updates to resimulate and interpolate between in order to provide
 a reasonably accurate preview of a networked player.
+
+[srcnet]:https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking
 
 ## Repository Structure
 

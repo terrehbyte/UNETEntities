@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-using UnityEngine.Networking;
+using Mirror;
 using System.Collections;
 
 // Actions as determined by input signals from the player.
@@ -15,7 +15,7 @@ public struct PlayerInputState
     public float moveRight;
 }
 
-[NetworkSettings(channel = 2, sendInterval = 0.333f)]
+//[NetworkSettings(channel = 2, sendInterval = 0.333f)]
 public class PlayerEntity : NetworkBehaviour
 {
     // The prefab for the default player character.
@@ -111,9 +111,11 @@ public class PlayerEntity : NetworkBehaviour
     }
     void FixedUpdate()
     {
+        Debug.Log("Local: Am I the local player? " + isLocalPlayer, this);
         // poll and process input
         if(isLocalPlayer && pawn != null)
         {
+            Debug.Log("Local: Processing input...!", this);
             // pass to playerlocomotion for processing
             locomotion.AcceptInput(GetInput());
         }

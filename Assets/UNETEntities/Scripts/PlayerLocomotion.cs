@@ -1,9 +1,10 @@
 ﻿using UnityEngine;
-using UnityEngine.Networking;
+using Mirror;
 
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
+using System;
 
 public struct PlayerLocomotionState
 {
@@ -24,13 +25,11 @@ public struct PlayerLocomotionState
         targetRbody.rotation = Quaternion.LookRotation(forward, Vector3.up);
     }
 
-
-
     public bool clientAcknowledged;
     public bool serverAcknowledged;
 }
 
-[NetworkSettings(channel = 0, sendInterval = 0.333f)]
+//[NetworkSettings(channel = 0, sendInterval = 0.333f)]
 public class PlayerLocomotion : NetworkBehaviour
 {
     private float speed = 10f;
@@ -42,20 +41,23 @@ public class PlayerLocomotion : NetworkBehaviour
     private Queue<PlayerInputState> serverCommandHistory = new Queue<PlayerInputState>();
 
     // Last valid state as reported by the server.
-    [SyncVar]
     public PlayerLocomotionState serverState;
 
     // The ID of the last command acknowledged by the server.
-    [SyncVar]
     private int lastAcknowledgedCommandID = -1;
 
     // Number of commands issued.
     private int commandCounter = 0;
 
-    const int commandHistorySize = 10;
+    const int commandHistorySize = 100;
 
     // Commands issued by this client. Only valid on client with authority.
     private PlayerInputState[] commandHistory;
+
+    private delegate void ServerStateUpdate(PlayerLocomotionState newServerState, int newServerAckID);
+
+    [SyncEvent]
+    private event ServerStateUpdate EventOnServerStateUpdate;
 
     public PlayerLocomotionState GetFinalState()
     {
@@ -100,9 +102,14 @@ public class PlayerLocomotion : NetworkBehaviour
         while(true && failSafe < 100)
         {
             var newState = Simulate(workingState, workingCommand);
-            if (workingCommand.id == commandCounter - 1)
-                break;
 
+            // if we've reached the last command to process, exit
+            if (workingCommand.id == commandCounter - 1)
+            {
+                break;
+            }
+
+            // update the state
             workingState = newState;
             workingCommand = commandHistory[(workingCommand.id + 1) % commandHistorySize];
 
@@ -128,7 +135,19 @@ public class PlayerLocomotion : NetworkBehaviour
         input.id = commandCounter++;
         commandHistory[index] = input;
 
-        CmdUploadInput(input);
+        UploadInput(input);
+    }
+
+    private void UploadInput(PlayerInputState input)
+    {
+        if(isServer)
+        {
+            serverCommandHistory.Enqueue(input);
+        }
+        else
+        {
+            CmdUploadInput(input);
+        }
     }
 
     [Command(channel = 0)]
@@ -160,12 +179,24 @@ public class PlayerLocomotion : NetworkBehaviour
             //var rtt = NetworkManager.singleton.client.GetRTT();
             commandHistory = new PlayerInputState[commandHistorySize];
         }
+
+        EventOnServerStateUpdate += ClientRecvServerUpdate;
+    }
+
+    private void ClientRecvServerUpdate(PlayerLocomotionState newServerState, int newServerAckID)
+    {
+        serverState = newServerState;
+        lastAcknowledgedCommandID = newServerAckID;
     }
 
     // Updates the state of the player object for rendering and/or transmission.
     void FixedUpdate()
     {
-        if (isServer) { serverState = GetFinalState(); }
+        if (isServer)
+        {
+            serverState = GetFinalState();
+            EventOnServerStateUpdate(serverState, lastAcknowledgedCommandID);
+        }
 
         GetFinalState().apply(attachedRigidbody);
     }
